@@ -9,12 +9,21 @@ const truthy = v => v === true || ['on', 'yes', 'true', '1'].includes(String(v).
 const kbpsToBps = kbps => Number(kbps) > 0 ? Number(kbps) * 1000 : 0;
 const bpsToKbps = bps => bps > 0 ? Math.max(1, Math.round(bps / 1000)) : -1;
 const list = data => Array.isArray(data) ? data : [];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// What the router's downloadSpeed/uploadSpeed fields are measured in, as a multiplier to bits per second.
+// Default is bytes/s. If the data cap never triggers, usage is probably undercounted: try SPEED_UNIT=kbytes.
+const SPEED_UNITS = { bits: 1, kbits: 1e3, bytes: 8, kbytes: 8e3 };
+const roundKbps = bps => bps > 0 ? Math.max(1, Math.round(bps / 1000)) * 1000 : 0;
 
 export async function createMercusysDriver(env, { mock }) {
   let url = env.ROUTER_URL || 'http://192.168.1.1';
   let password = env.ROUTER_PASS;
   if (mock) ({ url, password } = await startFakeMercusys());
   if (!password) throw new Error('Set ROUTER_PASS (the MR60X web login password) in .env.');
+
+  const speedUnit = env.SPEED_UNIT || 'bytes';
+  if (!(speedUnit in SPEED_UNITS)) throw new Error(`SPEED_UNIT must be one of: ${Object.keys(SPEED_UNITS).join(', ')}`);
+  const toBits = SPEED_UNITS[speedUnit];
 
   const client = createMercusysClient({
     url,
@@ -70,7 +79,7 @@ export async function createMercusysDriver(env, { mock }) {
         signal: !wired && c.signal && Number(c.signal) < 0 ? Number(c.signal) : null,
         blocked: blocked.has(mac),
         limit: limited ? { down: kbpsToBps(c.downloadLimit), up: kbpsToBps(c.uploadLimit) } : null,
-        rate: { down: Number(c.downloadSpeed ?? 0) * 8, up: Number(c.uploadSpeed ?? 0) * 8 },
+        rate: { down: Number(c.downloadSpeed ?? 0) * toBits, up: Number(c.uploadSpeed ?? 0) * toBits },
         raw: c,
       });
     }
@@ -176,6 +185,15 @@ export async function createMercusysDriver(env, { mock }) {
       const device = await findDevice(mac);
       if (!device.online) throw httpError(409, 'The router can only limit devices that are currently connected');
       await writeLimit(device, true, bpsToKbps(down), bpsToKbps(up));
+
+      // The router accepts the write even when it doesn't keep it, so read it back.
+      const want = { down: roundKbps(down), up: roundKbps(up) };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt) await sleep(800);
+        const got = (await findDevice(mac)).limit;
+        if (got && got.down === want.down && got.up === want.up) return;
+      }
+      throw httpError(502, 'The router accepted the speed limit but did not keep it. Check the router page; if IPv6 is on, turn it off and reboot the router.');
     },
 
     async clearLimit(mac) {
