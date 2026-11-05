@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Router Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e0f11;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --surface-3: #2c2c29;
+    --border: #2f2f2c;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8d8c84;
+    --grid: #2a2a27;
+    --series-down: #3987e5;
+    --series-up: #d95926;
+    --accent: #3987e5;
+    --good: #2fb36b;
+    --warning: #c98500;
+    --critical: #e66767;
+    --radius: 14px;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font: 14px/1.45 Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px 48px; }
+
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #2a5fa8, #3987e5); flex-shrink: 0;
+  }
+  .router-name { font-size: 18px; font-weight: 600; }
+  .router-meta { color: var(--text-muted); font-size: 12.5px; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+    background: var(--surface-1); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-secondary);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  .pill.live .dot { background: var(--good); box-shadow: 0 0 0 3px rgb(47 179 107 / .18); }
+  .pill.down .dot { background: var(--critical); }
+  .mock-tag { background: rgb(201 133 0 / .15); color: #e0a93a; border-color: rgb(201 133 0 / .35); }
+
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .kpi { padding: 16px 18px; }
+  .kpi-label { color: var(--text-muted); font-size: 12.5px; display: flex; align-items: center; gap: 7px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .kpi-value { font-size: 28px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi-value small { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 4px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
+  .meter > i { display: block; height: 100%; border-radius: 3px; background: var(--text-secondary); transition: width .4s; }
+  .meter-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); margin-top: 10px; }
+
+  .chart-card { padding: 16px 18px 12px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .card-title { font-weight: 600; font-size: 15px; }
+  .card-sub { color: var(--text-muted); font-size: 12.5px; }
+  .legend { display: flex; gap: 16px; color: var(--text-secondary); font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-box { position: relative; height: 240px; margin-top: 10px; }
+  .chart-box canvas { width: 100%; height: 100%; display: block; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-3); border: 1px solid #3a3a36;
+    border-radius: 10px; padding: 8px 10px; font-size: 12.5px; min-width: 150px; opacity: 0; transition: opacity .1s;
+    box-shadow: 0 8px 24px rgb(0 0 0 / .35);
+  }
+  .tooltip .row { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+  .tooltip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tooltip .t { color: var(--text-muted); margin-bottom: 4px; }
+
+  .devices { padding: 16px 0 6px; }
+  .devices .card-head { padding: 0 18px 12px; }
+  .search {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px;
+    width: 220px; outline: none;
+  }
+  .search:focus { border-color: var(--accent); }
+  .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+  .seg button {
+    border: 0; background: none; padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--text-secondary); font-size: 13px;
+  }
+  .seg button[aria-pressed="true"] { background: var(--surface-3); color: var(--text-primary); }
+  .seg .n { color: var(--text-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+  .list-head, .device {
+    display: grid; grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.4fr) minmax(170px, 1.5fr) 120px 150px;
+    gap: 14px; align-items: center; padding: 0 18px;
+  }
+  .list-head { color: var(--text-muted); font-size: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .device { padding-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .device:last-child { border-bottom: 0; }
+  .device.offline { opacity: .55; }
+  .device.blocked .dev-icon { background: rgb(230 103 103 / .14); color: var(--critical); }
+  .dev-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .dev-icon {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--surface-3); display: grid; place-items: center;
+    color: var(--text-secondary); flex-shrink: 0;
+  }
+  .dev-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dev-sub { color: var(--text-muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 2px 8px; border-radius: 6px;
+    background: var(--surface-3); color: var(--text-secondary); white-space: nowrap;
+  }
+  .badge.critical { background: rgb(230 103 103 / .14); color: #f08a8a; }
+  .badge.good { background: rgb(47 179 107 / .13); color: #5fd395; }
+  .badge.limit { background: rgb(57 135 229 / .14); color: #8bb8f0; }
+  .conn { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 12.5px; color: var(--text-secondary); }
+  .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-right: 4px; }
+  .signal i { width: 3px; border-radius: 1px; background: var(--surface-3); }
+  .signal i.on { background: var(--text-secondary); }
+  .rate { display: grid; grid-template-columns: 1fr 64px; gap: 2px 8px; align-items: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .rate .v { display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+  .rate .spark { grid-row: span 2; width: 64px; height: 28px; }
+  .muted { color: var(--text-muted); }
+  .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--surface-2); padding: 7px 12px; border-radius: 9px; cursor: pointer;
+    font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--surface-3); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #4a94ec; }
+  .btn.danger { color: #f08a8a; }
+  .switch { position: relative; width: 40px; height: 23px; flex-shrink: 0; }
+  .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--good); transition: background .2s; }
+  .switch span::after {
+    content: ''; position: absolute; top: 3px; left: 20px; width: 17px; height: 17px; border-radius: 50%; background: #fff; transition: left .2s;
+  }
+  .switch input:not(:checked) + span { background: var(--surface-3); }
+  .switch input:not(:checked) + span::after { left: 3px; }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch input:disabled { cursor: wait; }
+  .empty { padding: 40px 18px; text-align: center; color: var(--text-muted); }
+
+  dialog {
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 16px;
+    padding: 0; width: min(440px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgb(0 0 0 / .6); backdrop-filter: blur(2px); }
+  .dlg-head { padding: 18px 20px 0; }
+  .dlg-body { padding: 16px 20px; display: grid; gap: 16px; }
+  .dlg-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  label.field { display: grid; gap: 6px; font-size: 12.5px; color: var(--text-secondary); }
+  .field input[type=text], .num {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; width: 100%;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .limit-row { display: grid; grid-template-columns: 1fr 96px; gap: 12px; align-items: center; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .presets button { padding: 5px 10px; font-size: 12.5px; }
+  .hint { font-size: 12px; color: var(--text-muted); }
+
+  .toasts { position: fixed; bottom: 16px; right: 16px; display: grid; gap: 8px; z-index: 10; max-width: calc(100vw - 32px); }
+  .toast {
+    background: var(--surface-3); border: 1px solid #3a3a36; border-left: 3px solid var(--good); padding: 10px 14px;
+    border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .4); font-size: 13px;
+  }
+  .toast.error { border-left-color: var(--critical); }
+
+  @media (max-width: 980px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .list-head { display: none; }
+    .device { grid-template-columns: 1fr auto; row-gap: 10px; }
+    .device .dev-main { grid-column: 1 / -1; }
+    .device .actions { grid-column: 1 / -1; justify-content: flex-start; }
+    .devices .card-head .spacer { display: none; }
+    .search { width: 100%; }
+  }
+  @media (max-width: 520px) {
+    .kpi-value { font-size: 22px; }
+    .chart-box { height: 200px; }
+    .seg { width: 100%; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M2 9.5a15 15 0 0 1 20 0"/><circle cx="12" cy="20" r="1" fill="#fff"/></svg>
+    </div>
+    <div>
+      <div class="router-name" id="routerName">Connecting…</div>
+      <div class="router-meta" id="routerMeta">&nbsp;</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill mock-tag" id="mockTag" hidden>Mock router</span>
+    <span class="pill" id="statusPill"><span class="dot"></span><span id="statusText">Connecting</span></span>
+  </header>
+
+  <section class="kpis">
+    <div class="card kpi">
+      <div class="kpi-label"><span class="swatch" style="background:var(--series-down)"></span>Download</div>
+      <div class="kpi-value" id="kpiDown">–</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label"><span class="swatch" style="background:var(--series-up)"></span>Upload</div>
+      <div class="kpi-value" id="kpiUp">–</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Devices online</div>
+      <div class="kpi-value" id="kpiDevices">–</div>
+      <div class="meter-row"><span id="kpiBlocked">0 blocked</span><span id="kpiLimited">0 limited</span></div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-label">Router load</div>
+      <div class="meter-row"><span>CPU</span><span id="cpuVal">–</span></div>
+      <div class="meter"><i id="cpuBar" style="width:0"></i></div>
+      <div class="meter-row"><span>Memory</span><span id="memVal">–</span></div>
+      <div class="meter"><i id="memBar" style="width:0"></i></div>
+    </div>
+  </section>
+
+  <section class="card chart-card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Internet throughput</div>
+        <div class="card-sub" id="chartSub">Last 2 minutes</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--series-down)"></i>Download</span>
+        <span><i class="swatch" style="background:var(--series-up)"></i>Upload</span>
+      </div>
+    </div>
+    <div class="chart-box" id="chartBox">
+      <canvas id="chart" role="img" aria-label="Internet download and upload speed over the last two minutes"></canvas>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </section>
+
+  <section class="card devices">
+    <div class="card-head">
+      <div class="card-title">Devices</div>
+      <div class="spacer"></div>
+      <input class="search" id="search" type="search" placeholder="Search name, IP or MAC" aria-label="Search devices">
+      <div class="seg" id="filters" role="group" aria-label="Filter devices">
+        <button data-filter="all" aria-pressed="true">All<span class="n"></span></button>
+        <button data-filter="online" aria-pressed="false">Online<span class="n"></span></button>
+        <button data-filter="blocked" aria-pressed="false">Blocked<span class="n"></span></button>
+        <button data-filter="limited" aria-pressed="false">Limited<span class="n"></span></button>
+      </div>
+    </div>
+    <div class="list-head">
+      <span>Device</span><span>Connection</span><span>Live speed</span><span>Speed limit</span><span style="text-align:right">Internet access</span>
+    </div>
+    <div id="deviceList"><div class="empty">Loading devices…</div></div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <div class="dlg-head">
+      <div class="card-title" id="dlgTitle">Device</div>
+      <div class="card-sub" id="dlgSub"></div>
+    </div>
+    <div class="dlg-body">
+      <label class="field">Name
+        <input type="text" id="fName" maxlength="64" autocomplete="off">
+      </label>
+      <div id="limitSection" style="display:grid;gap:16px">
+      <div class="field">
+        <span>Download limit (Mbps) — 0 means unlimited</span>
+        <div class="limit-row">
+          <input type="range" id="rDown" min="0" max="500" step="1">
+          <input class="num" type="number" id="fDown" min="0" max="10000" step="0.5" aria-label="Download limit in Mbps">
+        </div>
+      </div>
+      <div class="field">
+        <span>Upload limit (Mbps) — 0 means unlimited</span>
+        <div class="limit-row">
+          <input type="range" id="rUp" min="0" max="500" step="1">
+          <input class="num" type="number" id="fUp" min="0" max="10000" step="0.5" aria-label="Upload limit in Mbps">
+        </div>
+      </div>
+      <div class="presets" id="presets">
+        <button type="button" class="btn" data-d="1" data-u="0.5">1 Mbps</button>
+        <button type="button" class="btn" data-d="5" data-u="2">5 Mbps</button>
+        <button type="button" class="btn" data-d="10" data-u="5">10 Mbps</button>
+        <button type="button" class="btn" data-d="25" data-u="10">25 Mbps</button>
+        <button type="button" class="btn" data-d="50" data-u="20">50 Mbps</button>
+        <button type="button" class="btn" data-d="0" data-u="0">Unlimited</button>
+      </div>
+      </div>
+      <div class="hint" id="dlgHint"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn danger" id="btnClear">Remove limit</button>
+      <div class="spacer"></div>
+      <button type="button" class="btn" id="btnCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="btnSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+const POLL_MS = 2000;
+const HISTORY = 60;
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const state = { data: null, wan: [], deviceHistory: new Map(), filter: 'all', query: '', pending: new Set(), editing: null, hover: null };
+
+const icons = {
+  wifi: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></svg>',
+  wired: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  blocked: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>',
+  down: '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 9 1 4h8z" fill="var(--series-down)"/></svg>',
+  up: '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1 9 6H1z" fill="var(--series-up)"/></svg>',
+  gauge: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 14l4-4M3.3 17a10 10 0 1 1 17.4 0"/></svg>',
+};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function fmtRate(bps, unit = true) {
+  if (bps == null) return '–';
+  const [v, u] = bps >= 1e9 ? [bps / 1e9, 'Gbps'] : bps >= 1e6 ? [bps / 1e6, 'Mbps'] : bps >= 1e3 ? [bps / 1e3, 'Kbps'] : [bps, 'bps'];
+  const n = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+  return unit ? `${n} ${u}` : [n, u];
+}
+const fmtLimit = bps => bps ? fmtRate(bps).replace(/\.0+ /, ' ') : '∞';
+
+function fmtUptime(s) {
+  if (!s) return '';
+  const parts = { w: 604800, d: 86400, h: 3600, m: 60, s: 1 };
+  let secs = 0;
+  for (const [, n, u] of s.matchAll(/(\d+)([wdhms])/g)) secs += n * parts[u];
+  const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function toast(msg, error = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (error ? ' error' : '');
+  el.textContent = msg;
+  $('toasts').append(el);
+  setTimeout(() => el.remove(), error ? 6000 : 3000);
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  return json;
+}
+
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const data = await api('GET', '/api/state');
+    state.data = data;
+    if (data.wan) {
+      state.wan.push({ t: data.time, down: data.wan.down, up: data.wan.up });
+      if (state.wan.length > HISTORY) state.wan.shift();
+    }
+    for (const d of data.devices) {
+      if (!d.rate) continue;
+      const h = state.deviceHistory.get(d.mac) ?? [];
+      h.push(d.rate.down);
+      if (h.length > 30) h.shift();
+      state.deviceHistory.set(d.mac, h);
+    }
+    setStatus(true);
+    render();
+  } catch (err) {
+    setStatus(false, err.message);
+  } finally {
+    polling = false;
+  }
+}
+
+function setStatus(ok, msg) {
+  $('statusPill').className = 'pill ' + (ok ? 'live' : 'down');
+  $('statusText').textContent = ok ? 'Live' : 'Router unreachable';
+  $('statusPill').title = msg ?? '';
+}
+
+function render() {
+  const { router, wan, devices, mock } = state.data;
+  $('mockTag').hidden = !mock;
+  $('routerName').textContent = router.name;
+  $('routerMeta').textContent = [router.model, router.firmware, router.uptime && `up ${fmtUptime(router.uptime)}`].filter(Boolean).join(' · ');
+  document.title = `${router.name} · Router Dashboard`;
+
+  const setKpi = (id, bps) => {
+    const [n, u] = bps == null ? ['–', ''] : fmtRate(bps, false);
+    $(id).innerHTML = `${n}<small>${u}</small>`;
+  };
+  setKpi('kpiDown', wan?.down);
+  setKpi('kpiUp', wan?.up);
+  $('chartSub').textContent = `${wan.label} · last 2 minutes`;
+
+  const online = devices.filter(d => d.online).length;
+  $('kpiDevices').innerHTML = `${online}<small>/ ${devices.length}</small>`;
+  $('kpiBlocked').textContent = `${devices.filter(d => d.blocked).length} blocked`;
+  $('kpiLimited').textContent = `${devices.filter(d => d.limit).length} limited`;
+
+  const meter = (bar, label, frac) => {
+    $(bar).style.width = frac == null ? '0' : `${Math.round(frac * 100)}%`;
+    $(bar).style.background = frac > 0.85 ? 'var(--critical)' : frac > 0.65 ? 'var(--warning)' : 'var(--text-secondary)';
+    $(label).textContent = frac == null ? '–' : `${Math.round(frac * 100)}%`;
+  };
+  meter('cpuBar', 'cpuVal', router.cpu);
+  meter('memBar', 'memVal', router.memory);
+
+  renderDevices();
+  drawChart();
+}
+
+const filters = {
+  all: () => true,
+  online: d => d.online,
+  blocked: d => d.blocked,
+  limited: d => d.limit,
+};
+
+function signalBars(dbm) {
+  if (dbm == null) return '';
+  const level = dbm >= -55 ? 4 : dbm >= -65 ? 3 : dbm >= -72 ? 2 : 1;
+  return `<span class="signal" aria-hidden="true">${[4, 7, 10, 12].map((h, i) => `<i style="height:${h}px" class="${i < level ? 'on' : ''}"></i>`).join('')}</span>`;
+}
+
+function sparkline(values, max) {
+  if (!values || values.length < 2) return '<svg class="spark"></svg>';
+  const peak = Math.max(max || 0, ...values, 1);
+  const pts = values.map((v, i) => `${(i / 29 * 64).toFixed(1)},${(26 - v / peak * 24).toFixed(1)}`);
+  const offset = 64 - (values.length - 1) / 29 * 64;
+  return `<svg class="spark" viewBox="0 0 64 28" aria-hidden="true"><polyline transform="translate(${offset.toFixed(1)} 0)" points="${pts.join(' ')}" fill="none" stroke="var(--series-down)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function renderDevices() {
+  const { devices } = state.data;
+  const q = state.query.toLowerCase();
+  for (const btn of $('filters').children) btn.querySelector('.n').textContent = devices.filter(filters[btn.dataset.filter]).length;
+
+  const shown = devices.filter(filters[state.filter]).filter(d =>
+    !q || [d.name, d.ip, d.mac, d.hostName].some(v => v && v.toLowerCase().includes(q)));
+
+  if (!shown.length) {
+    $('deviceList').innerHTML = `<div class="empty">${devices.length ? 'No devices match.' : 'No devices found on the router.'}</div>`;
+    return;
+  }
+
+  $('deviceList').innerHTML = shown.map(d => {
+    const busy = state.pending.has(d.mac);
+    const status = d.blocked
+      ? '<span class="badge critical">Blocked</span>'
+      : d.online ? '<span class="badge good">Online</span>' : '<span class="badge">Offline</span>';
+    const rate = d.rate
+      ? `<div class="rate">
+           <span class="v">${icons.down}${fmtRate(d.rate.down)}</span>
+           ${sparkline(state.deviceHistory.get(d.mac), d.limit?.down)}
+           <span class="v">${icons.up}${fmtRate(d.rate.up)}</span>
+         </div>`
+      : '<span class="muted" style="font-size:12.5px">Not monitored</span>';
+    const limit = d.limit
+      ? `<span class="badge limit">${icons.gauge}${fmtLimit(d.limit.down)} / ${fmtLimit(d.limit.up)}</span>`
+      : `<span class="muted" style="font-size:12.5px">${state.data.capabilities.speedLimit ? 'Unlimited' : 'Not supported'}</span>`;
+    return `
+      <div class="device ${d.online ? '' : 'offline'} ${d.blocked ? 'blocked' : ''}" data-mac="${d.mac}">
+        <div class="dev-main">
+          <div class="dev-icon">${d.blocked ? icons.blocked : icons[d.connection]}</div>
+          <div style="min-width:0">
+            <div class="dev-name" title="${esc(d.hostName)}">${esc(d.name)}</div>
+            <div class="dev-sub">${esc(d.ip ?? 'no IP')} · ${d.mac}</div>
+          </div>
+        </div>
+        <div class="conn">
+          ${status}
+          <span>${signalBars(d.signal)}${d.connection === 'wifi' ? `Wi-Fi${d.signal ? ` ${d.signal} dBm` : ''}` : 'Wired'}${d.interface ? ` · ${esc(d.interface)}` : ''}</span>
+        </div>
+        ${rate}
+        <div>${limit}</div>
+        <div class="actions">
+          <button class="btn" data-action="edit" ${d.ip ? '' : 'disabled title="Device has no IP address"'}>Manage</button>
+          <label class="switch" title="${d.blocked ? 'Allow internet access' : 'Block internet access'}">
+            <input type="checkbox" data-action="block" ${d.blocked ? '' : 'checked'} ${busy ? 'disabled' : ''} aria-label="Internet access for ${esc(d.name)}">
+            <span></span>
+          </label>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function device(mac) { return state.data.devices.find(d => d.mac === mac); }
+
+$('deviceList').addEventListener('change', async e => {
+  if (e.target.dataset.action !== 'block') return;
+  const mac = e.target.closest('.device').dataset.mac;
+  const d = device(mac);
+  const blocked = !e.target.checked;
+  state.pending.add(mac);
+  d.blocked = blocked;
+  renderDevices();
+  try {
+    await api('POST', `/api/devices/${mac}/block`, { blocked });
+    toast(`${d.name} ${blocked ? 'blocked' : 'unblocked'}`);
+  } catch (err) {
+    d.blocked = !blocked;
+    toast(err.message, true);
+  } finally {
+    state.pending.delete(mac);
+    poll();
+  }
+});
+
+$('deviceList').addEventListener('click', e => {
+  if (e.target.closest('[data-action="edit"]')) openDialog(e.target.closest('.device').dataset.mac);
+});
+
+$('filters').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  state.filter = btn.dataset.filter;
+  for (const b of $('filters').children) b.setAttribute('aria-pressed', String(b === btn));
+  renderDevices();
+});
+$('search').addEventListener('input', e => { state.query = e.target.value; renderDevices(); });
+
+const pair = (range, num) => {
+  range.addEventListener('input', () => num.value = range.value);
+  num.addEventListener('input', () => range.value = Math.min(Number(num.value) || 0, Number(range.max)));
+};
+pair($('rDown'), $('fDown'));
+pair($('rUp'), $('fUp'));
+const setLimits = (down, up) => {
+  $('fDown').value = $('rDown').value = down;
+  $('fUp').value = $('rUp').value = up;
+};
+$('presets').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (b) setLimits(b.dataset.d, b.dataset.u);
+});
+
+function openDialog(mac) {
+  const d = device(mac);
+  state.editing = { mac, name: d.name, down: (d.limit?.down ?? 0) / 1e6, up: (d.limit?.up ?? 0) / 1e6 };
+  $('dlgTitle').textContent = d.name;
+  const caps = state.data.capabilities;
+  $('dlgSub').textContent = `${d.ip ?? 'no IP'} · ${d.mac}`;
+  $('fName').value = d.name;
+  $('fName').disabled = !d.canRename;
+  $('fName').title = d.canRename ? '' : 'This device cannot be renamed right now';
+  $('limitSection').hidden = !caps.speedLimit;
+  const maxDown = caps.limitMax?.down ? Math.min(500, caps.limitMax.down / 1e6) : 500;
+  const maxUp = caps.limitMax?.up ? Math.min(500, caps.limitMax.up / 1e6) : 500;
+  $('rDown').max = maxDown;
+  $('rUp').max = maxUp;
+  setLimits(state.editing.down, state.editing.up);
+  $('btnClear').hidden = !d.limit || !caps.speedLimit;
+  $('dlgHint').textContent = d.rate ? `Currently using ${fmtRate(d.rate.down)} down / ${fmtRate(d.rate.up)} up.` : '';
+  $('dlg').showModal();
+}
+
+$('btnCancel').addEventListener('click', () => $('dlg').close());
+
+$('btnClear').addEventListener('click', async () => {
+  const { mac } = state.editing;
+  try {
+    await api('DELETE', `/api/devices/${mac}/limit`);
+    toast('Speed limit removed');
+    $('dlg').close();
+  } catch (err) { toast(err.message, true); }
+  poll();
+});
+
+$('dlgForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const ed = state.editing;
+  const name = $('fName').value.trim();
+  const down = Number($('fDown').value) || 0;
+  const up = Number($('fUp').value) || 0;
+  $('btnSave').disabled = true;
+  try {
+    if (!$('fName').disabled && name !== ed.name) await api('POST', `/api/devices/${ed.mac}/name`, { name });
+    if (down !== ed.down || up !== ed.up) {
+      await (down || up
+        ? api('POST', `/api/devices/${ed.mac}/limit`, { down, up })
+        : api('DELETE', `/api/devices/${ed.mac}/limit`));
+    }
+    toast('Device updated');
+    $('dlg').close();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    $('btnSave').disabled = false;
+    poll();
+  }
+});
+
+function niceMax(v) {
+  if (v <= 0) return 1e6;
+  const exp = 10 ** Math.floor(Math.log10(v));
+  return [1, 2, 2.5, 5, 10].map(m => m * exp).find(m => m >= v * 1.1) ?? 10 * exp;
+}
+
+const chart = { pad: { l: 64, r: 16, t: 10, b: 24 } };
+
+function drawChart() {
+  const canvas = $('chart');
+  const box = $('chartBox');
+  const dpr = window.devicePixelRatio || 1;
+  const w = box.clientWidth, h = box.clientHeight;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const { l, r, t, b } = chart.pad;
+  const pw = w - l - r, ph = h - t - b;
+  const data = state.wan;
+  const max = niceMax(Math.max(0, ...data.map(p => Math.max(p.down, p.up))));
+  const x = i => l + pw - (data.length - 1 - i) / (HISTORY - 1) * pw;
+  const y = v => t + ph - v / max * ph;
+  Object.assign(chart, { x, y, pw, ph, w, h });
+
+  ctx.font = '11px Inter, system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4, yy = Math.round(y(v)) + 0.5;
+    ctx.strokeStyle = css('--grid');
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(l, yy); ctx.lineTo(l + pw, yy); ctx.stroke();
+    ctx.fillStyle = css('--text-muted');
+    ctx.fillText(v ? fmtRate(v) : "0", l - 10, yy);
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  [['2m', 0], ['1m', 0.5], ['now', 1]].forEach(([label, f]) => {
+    ctx.textAlign = f === 0 ? 'left' : f === 1 ? 'right' : 'center';
+    ctx.fillText(label, l + f * pw, h - 6);
+  });
+
+  if (data.length < 2) return;
+  for (const [key, color] of [['up', css('--series-up')], ['down', css('--series-down')]]) {
+    const grad = ctx.createLinearGradient(0, t, 0, t + ph);
+    grad.addColorStop(0, color + '38');
+    grad.addColorStop(1, color + '00');
+    ctx.beginPath();
+    data.forEach((p, i) => i ? ctx.lineTo(x(i), y(p[key])) : ctx.moveTo(x(i), y(p[key])));
+    ctx.lineTo(x(data.length - 1), t + ph);
+    ctx.lineTo(x(0), t + ph);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    data.forEach((p, i) => i ? ctx.lineTo(x(i), y(p[key])) : ctx.moveTo(x(i), y(p[key])));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  if (state.hover != null && data[state.hover]) {
+    const i = state.hover, p = data[i], xx = Math.round(x(i)) + 0.5;
+    ctx.strokeStyle = css('--text-muted');
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(xx, t); ctx.lineTo(xx, t + ph); ctx.stroke();
+    ctx.setLineDash([]);
+    for (const [key, color] of [['down', css('--series-down')], ['up', css('--series-up')]]) {
+      ctx.beginPath();
+      ctx.arc(xx, y(p[key]), 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = css('--surface-1');
+      ctx.lineWidth = 2;
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+$('chartBox').addEventListener('mousemove', e => {
+  const data = state.wan;
+  if (data.length < 2 || !chart.x) return;
+  const rect = $('chartBox').getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  let best = 0;
+  data.forEach((_, i) => { if (Math.abs(chart.x(i) - mx) < Math.abs(chart.x(best) - mx)) best = i; });
+  state.hover = best;
+  const p = data[best];
+  const ago = Math.round((data.at(-1).t - p.t) / 1000);
+  const tip = $('tooltip');
+  tip.innerHTML = `<div class="t">${ago ? `${ago}s ago` : 'Now'}</div>
+    <div class="row"><span><i class="swatch" style="background:var(--series-down)"></i> Download</span><b>${fmtRate(p.down)}</b></div>
+    <div class="row"><span><i class="swatch" style="background:var(--series-up)"></i> Upload</span><b>${fmtRate(p.up)}</b></div>`;
+  const px = chart.x(best);
+  tip.style.left = `${Math.min(Math.max(px + 12, 0), rect.width - tip.offsetWidth - 4)}px`;
+  if (px + 12 + tip.offsetWidth > rect.width) tip.style.left = `${px - tip.offsetWidth - 12}px`;
+  tip.style.top = '8px';
+  tip.style.opacity = 1;
+  drawChart();
+});
+$('chartBox').addEventListener('mouseleave', () => {
+  state.hover = null;
+  $('tooltip').style.opacity = 0;
+  drawChart();
+});
+window.addEventListener('resize', () => state.data && drawChart());
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
