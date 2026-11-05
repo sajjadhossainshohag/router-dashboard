@@ -208,7 +208,7 @@ export function createAutomation({ router, store, clock = Date.now }) {
   function parseQuota(input) {
     if (!input) return null;
     const gb = Number(input.gb);
-    if (!Number.isFinite(gb) || gb < 0.05 || gb > 100000) throw httpError(422, 'Daily data cap must be between 0.05 and 100000 GB');
+    if (!Number.isFinite(gb) || gb < 0.001 || gb > 100000) throw httpError(422, 'Daily data cap must be between 1 MB and 100000 GB');
     if (input.action !== 'block' && input.action !== 'limit') throw httpError(422, 'Cap action must be block or limit');
     return { bytes: Math.round(gb * 1e9), action: input.action, ...(input.action === 'limit' && { limit: parseLimit(input.limit) }) };
   }
