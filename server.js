@@ -1,13 +1,16 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { createMercusysDriver } from './drivers/mercusys/index.js';
+import { createAutomation } from './automation.js';
+import { createStore } from './store.js';
 import { httpError } from './errors.js';
 
 const env = process.env;
 const MOCK = process.argv.includes('--mock') || env.MOCK === '1';
 const PORT = Number(env.PORT || 3000);
-const STATE_TTL_MS = Number(env.POLL_MS || 3000);
+const POLL_MS = Number(env.POLL_MS || 3000);
 const MAC_RE = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/;
 
 let router;
@@ -18,24 +21,56 @@ try {
   process.exit(1);
 }
 
-let cached = { at: 0, value: null, pending: null };
+const store = createStore(MOCK ? null : env.DATA_FILE || fileURLToPath(new URL('./data/store.json', import.meta.url)));
+const automation = createAutomation({ router, store });
 
-function loadState() {
-  if (cached.value && Date.now() - cached.at < STATE_TTL_MS) return Promise.resolve(cached.value);
-  cached.pending ??= router.loadState()
-    .then(state => {
-      const devices = [...state.devices].sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
-      cached = { at: Date.now(), value: { ...state, devices, mock: MOCK, time: Date.now() }, pending: null };
-      return cached.value;
-    })
-    .finally(() => { cached.pending = null; });
-  return cached.pending;
+let current = null;
+let lastError = null;
+let chain = Promise.resolve();
+
+async function doRefresh() {
+  try {
+    let state = await router.loadState();
+    if (await automation.tick(state)) state = await router.loadState();
+    const devices = [...state.devices].sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+    current = { ...state, devices, mock: MOCK, time: Date.now() };
+    lastError = null;
+  } catch (err) {
+    lastError = err;
+    console.error(`Router poll failed: ${err.message}`);
+  }
 }
 
-const afterWrite = async promise => {
+const refresh = () => (chain = chain.then(doRefresh));
+
+(async function loop() {
+  await refresh();
+  setTimeout(loop, POLL_MS);
+})();
+
+async function getState() {
+  if (!current) await chain;
+  if (lastError || !current) throw httpError(502, lastError?.message ?? 'Router not reachable yet');
+  return {
+    ...current,
+    devices: current.devices.map(d => ({ ...d, auto: automation.view(d.mac) })),
+    automation: automation.summary(),
+  };
+}
+
+const deviceName = mac => current?.devices.find(d => d.mac === mac)?.name ?? mac;
+
+async function afterWrite(promise) {
   await promise;
-  cached.at = 0;
-};
+  await refresh();
+}
+
+async function manualWrite(mac, kind, write, message) {
+  automation.manual(mac, kind);
+  await write();
+  automation.log('manual', mac, message);
+  await refresh();
+}
 
 function toBps(mbps) {
   const n = Number(mbps ?? 0);
@@ -76,15 +111,31 @@ const send = (res, status, body, type = 'application/json') => {
   res.end(type === 'application/json' ? JSON.stringify(body) : body);
 };
 
+const fmt = bps => bps ? `${bps / 1e6} Mbps` : 'unlimited';
+
 const routes = [
-  ['GET', /^\/api\/state$/, () => loadState()],
-  ['POST', /^\/api\/devices\/([^/]+)\/block$/, (mac, body) => afterWrite(router.setBlocked(mac, Boolean(body.blocked)))],
+  ['GET', /^\/api\/state$/, () => getState()],
+  ['POST', /^\/api\/devices\/([^/]+)\/block$/, (mac, body) => {
+    const blocked = Boolean(body.blocked);
+    return manualWrite(mac, 'block', () => router.setBlocked(mac, blocked), blocked ? 'Blocked from the dashboard' : 'Unblocked from the dashboard');
+  }],
   ['POST', /^\/api\/devices\/([^/]+)\/limit$/, (mac, body) => {
     const limit = { down: toBps(body.down), up: toBps(body.up) };
-    return afterWrite(limit.down || limit.up ? router.setLimit(mac, limit) : router.clearLimit(mac));
+    return limit.down || limit.up
+      ? manualWrite(mac, 'limit', () => router.setLimit(mac, limit), `Speed limit set to ${fmt(limit.down)} down / ${fmt(limit.up)} up`)
+      : manualWrite(mac, 'limit', () => router.clearLimit(mac), 'Speed limit removed');
   }],
-  ['DELETE', /^\/api\/devices\/([^/]+)\/limit$/, mac => afterWrite(router.clearLimit(mac))],
-  ['POST', /^\/api\/devices\/([^/]+)\/name$/, (mac, body) => afterWrite(router.rename(mac, cleanName(body.name)))],
+  ['DELETE', /^\/api\/devices\/([^/]+)\/limit$/, mac => manualWrite(mac, 'limit', () => router.clearLimit(mac), 'Speed limit removed')],
+  ['POST', /^\/api\/devices\/([^/]+)\/name$/, async (mac, body) => {
+    const name = cleanName(body.name);
+    const old = deviceName(mac);
+    await afterWrite(router.rename(mac, name));
+    if (old !== name) automation.log('manual', mac, `Renamed from "${old}"`);
+  }],
+  ['PUT', /^\/api\/devices\/([^/]+)\/rules$/, (mac, body) => afterWrite(automation.setRules(mac, body))],
+  ['POST', /^\/api\/devices\/([^/]+)\/timer$/, (mac, body) => afterWrite(automation.setTimer(mac, body))],
+  ['DELETE', /^\/api\/devices\/([^/]+)\/timer$/, mac => afterWrite(automation.clearTimer(mac))],
+  ['PUT', /^\/api\/settings$/, (_, body) => afterWrite(automation.setSettings(body))],
 ];
 
 http.createServer(async (req, res) => {

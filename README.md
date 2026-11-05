@@ -44,7 +44,28 @@ Things to know:
 - **Speed limits** only apply to devices that are connected. If a limit doesn't take effect, Mercusys recommends turning off IPv6 (Advanced > IPv6) and rebooting.
 - If your firmware doesn't support per-device limits, the dashboard detects it and shows "Not supported" instead of the controls.
 
+## Extra features (run by the dashboard, not the router)
+
+The MR60X only offers block and speed limit. The dashboard builds these on top, so **they only work while the dashboard is running**:
+
+| Feature | How it works |
+|---|---|
+| **Data usage** | Per device, today and this month. Estimated by adding up the live speed every few seconds, so it's close but not exact. History is kept for 62 days. |
+| **Timer** | Block a device, or slow it to 1 or 5 Mbps, for 30 min / 1 h / 2 h / until midnight. It undoes itself and restores the device's previous speed limit. |
+| **Block schedule** | Cut a device off during set hours on chosen days, for example 22:00–07:00 on school nights. Times past midnight work. |
+| **Daily data cap** | When a device uses more than a set number of GB in a day, block it or slow it down until midnight. |
+| **New-device guard** | "Block new devices" in Activity blocks any device the dashboard has never seen. Devices present on the first run count as known. |
+| **Activity log** | Every rule action, new device and change made from the dashboard. |
+
+How rules and your own changes interact:
+
+- If you unblock a device while a schedule, timer or cap has it blocked, from the dashboard, the router page or the Mercusys app, that rule pauses until it next starts (for example, tomorrow's bedtime).
+- A device you blocked yourself is never unblocked by a rule ending.
+- Speed limits set by a rule are re-applied if the router drops them, for example when the device reconnects.
+
+Rules, usage and the log are saved in `data/store.json` (set `DATA_FILE` to move it). Mock mode keeps them in memory only.
+
 ## Notes
 
 - Run the dashboard only on your own network. Router credentials stay on the server and never reach the browser.
-- `POLL_MS` sets how often the router is polled (default 3000 ms).
+- `POLL_MS` sets how often the router is polled (default 3000 ms). The dashboard polls continuously, even with no browser open, so the rules keep working. That also means it holds the router's single admin session the whole time it runs.
